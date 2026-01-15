@@ -67,12 +67,19 @@ def infer(response_vectors: np.ndarray) -> str:
     # Apply Otsu thresholding to each channel
     for i in range(3):
         threshold = threshold_otsu(response_vectors[:, :, i])
-        response_vectors[:, :, i] = np.where(response_vectors[:, :, i] > threshold, response_vectors[:, :, i], 0)
+        response_vectors[:, :, i] = np.where(
+            response_vectors[:, :, i] > threshold, response_vectors[:, :, i], 0
+        )
 
     # Resize to 256x256 and convert to float32
-    response_vectors = np.expand_dims(np.array(Image.fromarray((response_vectors * 255).astype(np.uint8)).resize((256, 256))), axis=0).astype(
-        np.float32
-    )
+    response_vectors = np.expand_dims(
+        np.array(
+            Image.fromarray((response_vectors * 255).astype(np.uint8)).resize(
+                (256, 256)
+            )
+        ),
+        axis=0,
+    ).astype(np.float32)
 
     # Predict the class index
     predicted_class_index = model(response_vectors)
@@ -153,7 +160,12 @@ def find_reference_region(image: np.ndarray, threshold: int = -1, stride: int = 
         box_sums = []
         for i in range(convolved_image.shape[0]):
             for j in range(convolved_image.shape[1]):
-                box_sum = np.sum(image[i * stride : i * stride + window_size, j * stride : j * stride + window_size])
+                box_sum = np.sum(
+                    image[
+                        i * stride : i * stride + window_size,
+                        j * stride : j * stride + window_size,
+                    ]
+                )
                 box_sums.append(box_sum)
                 top_left_coords.append((j * stride, i * stride))
 
@@ -219,7 +231,9 @@ def predict(pattern_type: str, response_vectors: np.ndarray, model_path: str):
         regressor = Unpickler(f).load()
 
     # Predict response distance at each pixel then reshape all estimated pixels to image shape
-    prediction = regressor.predict(response_vectors.reshape(-1, 29)).reshape(response_vectors.shape[:2])
+    prediction = regressor.predict(response_vectors.reshape(-1, 29)).reshape(
+        response_vectors.shape[:2]
+    )
 
     return prediction
 
@@ -233,7 +247,7 @@ if __name__ == "__main__":
     model = MLPRegressor()
 
     # file path - ***this assumes you're running it from the 'paper' subdirectory
-    dir_path = Path(__file__).parents[1] / "paper" / "cropped"  # / "all"
+    dir_path = r"C:\Users\Cameron\Desktop\Coding\Python\unsuperShapelets\paper\images\new_mlp_testing_imgs\all"  # / "all"
     save_path = Path(__file__).parents[1] / "paper" / "kmeansData"
 
     origin = time()
@@ -264,7 +278,9 @@ if __name__ == "__main__":
 
         # Compute 29th order shapelets and flatten to pass each pixel through regressor
         shapelet_order = 29
-        response_vectors = convresponse_n0(image=image, shapelet_order=shapelet_order, verbose=False)[0]
+        response_vectors = convresponse_n0(
+            image=image, shapelet_order=shapelet_order, verbose=False
+        )[0]
 
         # Get predicted pattern type from CNN inference
         pattern_type = infer(response_vectors[:, :, [1, 2, 5]])
@@ -296,7 +312,11 @@ if __name__ == "__main__":
             # Split the selected filepath into the filename+ext and the rest of the path
             dir_path, filename = os.path.split(file_path)
             # Use predicted pattern type and filepath to get predicted response distance and ideal reference region location
-            model_path = Path(__file__).parent / "models" / f"MLPRegressor-{pattern_type}-denoising-std0.05.pickle"
+            model_path = str(
+                Path(__file__).parent
+                / "models"
+                / f"MLPRegressor-{pattern_type}-denoising-std0.05.pickle"
+            )
             prediction = predict(pattern_type, response_vectors, model_path)
             pred_time = time() - starttime
             print(f"Pred Time: {pred_time}")
@@ -304,7 +324,7 @@ if __name__ == "__main__":
 
             start = time()
             # Determine the ideal box
-            ideal_data = find_reference_region(prediction, threshold=-1)
+            ideal_data = find_reference_region(prediction, threshold=99.9)
             print(f"RPA Time: {time()-start}")
             RPA_times.append(time() - start)
             start = time()
@@ -316,7 +336,7 @@ if __name__ == "__main__":
             # paper code: for testing:
 
             # Take the ideal_data from the predictor and split into seperate coords
-            top_left, bottom_right = ideal_data[0], ideal_data[1]
+            top_left, bottom_right = ideal_data[0][0], ideal_data[0][1]
             # Apply K-means response distance method on the image using the predicted reference region
             rdist = rdistance(
                 image=image,
@@ -347,17 +367,29 @@ if __name__ == "__main__":
             window_size = int(2.5 * lamb)
             names = [f"Lambda-{lamb}\npredicted-{pattern_type}", f"MLP_RD", "Kmeans_RD"]
 
-            fig, axes = plt.subplots(1, 3)
-            for i in range(len(images)):
-                # Plot each image in a subplot
-                axes[i].imshow(1 - images[i], cmap="gray")
-                axes[i].set_title(names[i])
-                # axes[i].axis('off')  # Turn off axis
-                axes[i].add_patch(Rectangle(top_left, width=window_size, height=window_size, linewidth=1, edgecolor="g", facecolor="none"))
+            # Create figure for rightmost image only
+            fig, ax = plt.subplots()
 
-            # Display the images
+            # Plot Kmeans RD image
+            ax.imshow(1 - images[2], cmap="gray")
+            ax.set_axis_off()
+            # ax.set_title(names[2])
+
+            # Add reference region boxes
+            for top_left in ideal_data[1]:
+                ax.add_patch(
+                    Rectangle(
+                        top_left,
+                        width=window_size,
+                        height=window_size,
+                        linewidth=1,
+                        edgecolor="g",
+                        facecolor="none",
+                    )
+                )
             plt.tight_layout()
-            fig.savefig(os.path.join(save_path, file), dpi=300)
+            # Save high resolution image with no padding
+            plt.savefig(file.replace(".", "_RPA."), dpi=600, bbox_inches=0)
             plt.close()
 
     # TODO Reporting, not sure what is needed for verbose portion when running method. leave all for now
@@ -370,5 +402,7 @@ if __name__ == "__main__":
     print(f"Hex incorrect: {hex_incorrect}")
     print(f"Stripe correct: {stripe_correct}")
     print(f"Stripe incorrect: {stripe_incorrect}")
-    print(f"Accuracy: {100*(hex_correct+stripe_correct)/(hex_correct+stripe_correct+hex_incorrect+stripe_incorrect)}")
+    print(
+        f"Accuracy: {100*(hex_correct+stripe_correct)/(hex_correct+stripe_correct+hex_incorrect+stripe_incorrect)}"
+    )
     print(f"NEITHERS: {neither}")
